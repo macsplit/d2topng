@@ -1,0 +1,59 @@
+direction: down
+
+glucose: "Glucose (6C)" {
+  shape: oval
+}
+
+glycolysis: "Glycolysis\n(Cytoplasm)" {
+  shape: rectangle
+  style: {
+    fill: "#e1f5fe"
+  }
+}
+
+pyruvate: "Pyruvate (3C) x2" {
+  shape: oval
+}
+
+# Connections for glycolysis stage
+glucose -> glycolysis: "Input"
+glycolysis -> pyruvate: "Net 2 ATP + NADH"
+
+# Branching paths for anaerobic conditions
+pathway_choice: "Cellular Environment" {
+  shape: diamond
+}
+
+pyruvate -> pathway_choice
+
+# Lactic Acid Fermentation Path
+lactic_path: "Lactic Acid Fermentation\n(Animals & Bacteria)" {
+  shape: rectangle
+  style: {
+    fill: "#ffebee"
+  }
+}
+
+pathway_choice -> lactic_path: "Low Oxygen / Muscle Cells"
+
+lactic_products: "Lactate (3C) + NAD+" {
+  shape: oval
+}
+
+lactic_path -> lactic_products
+
+# Alcoholic Fermentation Path
+alcohol_path: "Alcoholic Fermentation\n(Yeast & Plant Cells)" {
+  shape: rectangle
+  style: {
+    fill: "#e8f5e9"
+  }
+}
+
+pathway_choice -> alcohol_path: "Anoxic / Microorganisms"
+
+alcohol_products: "Ethanol (2C) + CO2 + NAD+" {
+  shape: oval
+}
+
+alcohol_path -> alcohol_products
