@@ -19,6 +19,15 @@ Produces a single static binary at `bin/d2topng` (`CGO_ENABLED=0`, stripped).
 No runtime dependencies — fonts are pulled from D2's own embedded font bytes
 at build time.
 
+## Install
+
+```
+go install ./cmd/d2topng
+```
+
+Installs `d2topng` to `$(go env GOPATH)/bin` (usually `~/go/bin`) — add that
+to your `PATH` if it isn't already, then run `d2topng` from anywhere.
+
 ## Usage
 
 ```
