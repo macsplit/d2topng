@@ -1,0 +1,23 @@
+db: Database {
+  shape: cylinder
+}
+choice: Decision {
+  shape: diamond
+}
+usr: User {
+  shape: person
+}
+sky: Cloud {
+  shape: cloud
+}
+warn: Hexagon {
+  shape: hexagon
+}
+circ: {
+  shape: circle
+}
+db -> choice
+choice -> usr: yes
+choice -> sky: no
+usr -> warn
+warn -> circ
