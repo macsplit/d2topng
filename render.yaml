@@ -1,0 +1,11 @@
+services:
+  - name: d2topng
+    type: web
+    runtime: go
+    plan: free
+    buildCommand: go build -tags netgo -ldflags '-s -w' -o bin/server ./cmd/d2topng-server
+    startCommand: ./bin/server
+    healthCheckPath: /healthz
+    envVars:
+      - key: D2TOPNG_API_TOKEN
+        sync: false

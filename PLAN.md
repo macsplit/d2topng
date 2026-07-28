@@ -347,6 +347,43 @@ static binary are all in place. Nothing currently planned is outstanding;
 remaining ideas (markdown labels, sketch mode, icons, class/sql_table
 composite shapes) are explicit non-goals unless raised again later.
 
+## Phase 9 — HTTP service (added after v1) — DONE (2026-07-29)
+- Decided against MCP for remote/hosted use: MCP's remote transport
+  (Streamable HTTP) is newer/less uniformly supported across SDKs, whereas a
+  plain `POST /render` HTTP endpoint needs no protocol-specific client
+  support at all — any agent that can issue an HTTP request can use it.
+- **Same repo, not a sibling one** — the deciding factor was Go's `internal/`
+  visibility rule: `internal/render` can only be imported by code inside this
+  module, so a separate repo couldn't import it without either exporting the
+  package (dropping the boundary that's intentionally keeping it a non-public
+  API for now) or cross-repo version pinning. `cmd/d2topng-server` sits
+  alongside `cmd/d2topng`, both importing `internal/render` directly.
+- `cmd/d2topng-server/main.go`: `GET /healthz` (liveness, no auth) and
+  `POST /render[?scale=N]` (raw D2 source body → `image/png`, or `400` with
+  D2's own compile diagnostics as the body). Optional bearer-token auth via
+  `D2TOPNG_API_TOKEN` — open if unset (fine for local use, not for a public
+  deploy). 1MiB request body cap via `http.MaxBytesReader`, 20s compile+render
+  timeout via `context.WithTimeout`. Verified end to end with `curl`:
+  healthz, missing/wrong token → 401, valid render → 200 + real PNG, invalid
+  D2 → 400 with diagnostics, `?scale=2` → exactly double resolution.
+- Tests in `cmd/d2topng-server/main_test.go` via `httptest`, no real network.
+- **Render.com deploy researched before implementing, not assumed**: fetched
+  Render's current docs (native Go runtime docs, Blueprint spec, Go
+  net/http quickstart) rather than relying on possibly-stale prior knowledge.
+  Key facts that shaped `render.yaml`: Render's native Go runtime is
+  currently pinned to Go 1.24, which satisfies this repo's `go 1.24.0` +
+  `toolchain go1.25.12` — `GOTOOLCHAIN=auto` will fetch 1.25.12 during
+  Render's build step same as it does locally, since build environments need
+  outbound network for module fetching regardless. Services must bind to
+  Render's `$PORT` env var (default 10000) — implemented in `main.go`.
+  Render's zero-config path is specifically a **Blueprint** (`render.yaml` at
+  repo root) connected via GitHub/GitLab — arbitrary git remotes (e.g. the
+  `nuc` bare repo this project also pushes to) don't support the Blueprint
+  auto-deploy flow, only GitHub/GitLab do.
+- `render.yaml`: `type: web`, `runtime: go`, `healthCheckPath: /healthz`,
+  `D2TOPNG_API_TOKEN` declared with `sync: false` (Render's convention for a
+  secret set manually in the dashboard rather than committed to git).
+
 ## Explicit non-goals (not deferred — dropped)
 - Themes / theme selection.
 - Markdown / rich text in labels.
