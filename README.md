@@ -67,7 +67,9 @@ PORT=8080 D2TOPNG_API_TOKEN=some-secret bin/d2topng-server
 - `GET /healthz` — liveness check, no auth required.
 - `POST /render[?scale=N]` — request body is raw D2 source; response is
   `image/png`. Compile errors come back as `400` with D2's own diagnostics
-  as the body.
+  as the body. `scale` is read only from this query parameter — there is no
+  equivalent request header, so a `Scale:` header (or similar) is silently
+  ignored.
 - If `D2TOPNG_API_TOKEN` is set, requests must include
   `Authorization: Bearer <token>`. If unset, the endpoint is open — fine for
   local use, not recommended for a public deployment.

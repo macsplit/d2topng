@@ -1,6 +1,8 @@
 package render
 
 import (
+	"strings"
+
 	"github.com/fogleman/gg"
 	"oss.terrastruct.com/d2/d2target"
 	"oss.terrastruct.com/d2/lib/geo"
@@ -176,21 +178,39 @@ func drawLabel(dc *gg.Context, s d2target.Shape, x, y, w, h float64) {
 
 	dc.SetFontFace(fontFace(s.Bold, float64(s.FontSize)))
 	setColor(dc, s.GetFontColor(), 1)
-	drawWrappedAt(dc, s.Label, tl.X+labelW/2, tl.Y+labelH/2, labelW)
+	drawMultilineAt(dc, s.Label, tl.X+labelW/2, tl.Y+labelH/2)
 }
 
-// drawWrappedAt draws word-wrapped text centered at a point given in the
-// current (possibly scaled) coordinate space. gg measures word-wrap against
-// the font face directly, ignoring the transform matrix, so — since
-// fontFace() already bakes outputScale into the face's point size — position
-// and wrap width must be resolved to the same device-pixel space before
-// drawing, rather than left for the matrix to transform. We do that by
-// transforming the point ourselves, then drawing under a temporarily
-// identity matrix with the wrap width scaled to match.
-func drawWrappedAt(dc *gg.Context, text string, x, y, width float64) {
+// drawMultilineAt draws text centered at a point given in the current
+// (possibly scaled) coordinate space. Like D2's own SVG renderer, it never
+// re-wraps: D2 already measured s.Label (and reserved s.LabelWidth/Height for
+// it) with any wrapping baked in as literal "\n"s during layout, so wrapping
+// again here — e.g. via gg's DrawStringWrapped at a re-derived width — can
+// disagree with that measurement (rounding, kerning) and produce an extra
+// line that overflows the reserved height into the shape's border. Splitting
+// on "\n" and drawing each line, mirroring d2svg's RenderText, keeps line
+// count and vertical placement consistent with D2's own layout.
+//
+// gg measures text against the font face directly, ignoring the transform
+// matrix, so — since fontFace() already bakes outputScale into the face's
+// point size — position must be resolved to the same device-pixel space
+// before drawing, rather than left for the matrix to transform. We do that
+// by transforming the point ourselves, then drawing under a temporarily
+// identity matrix.
+func drawMultilineAt(dc *gg.Context, text string, x, y float64) {
+	const lineSpacing = 1.2
+
 	dx, dy := dc.TransformPoint(x, y)
 	dc.Push()
 	dc.Identity()
-	dc.DrawStringWrapped(text, dx, dy, 0.5, 0.5, width*outputScale, 1.2, gg.AlignCenter)
+
+	lines := strings.Split(text, "\n")
+	h := float64(len(lines))*dc.FontHeight()*lineSpacing - (lineSpacing-1)*dc.FontHeight()
+	ly := dy - h/2
+	for _, line := range lines {
+		dc.DrawStringAnchored(line, dx, ly, 0.5, 1)
+		ly += dc.FontHeight() * lineSpacing
+	}
+
 	dc.Pop()
 }

@@ -82,11 +82,7 @@ func drawEdgeLabel(dc *gg.Context, conn d2target.Connection, route []*geo.Point)
 	mx, my := midpoint(route)
 	dc.SetFontFace(fontFace(conn.Bold, float64(conn.FontSize)))
 	setColor(dc, conn.GetFontColor(), 1)
-	dmx, dmy := dc.TransformPoint(mx, my)
-	dc.Push()
-	dc.Identity()
-	dc.DrawStringAnchored(conn.Label, dmx, dmy, 0.5, 0.5)
-	dc.Pop()
+	drawMultilineAt(dc, conn.Label, mx, my)
 }
 
 // midpoint returns the point halfway along the route's total path length.
