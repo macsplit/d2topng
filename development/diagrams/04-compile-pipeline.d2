@@ -1,0 +1,45 @@
+title: |md
+  # Compile Pipeline — render.Compile()
+| {near: top-center}
+
+dsl: "D2 source\n(string)" {shape: cylinder}
+
+with-log: "d2log.WithDefault(ctx)"
+ruler: "textmeasure.NewRuler()\n(font-metrics based\ntext measurement)"
+ruler-fail: "err != nil?" {shape: diamond}
+
+layout-resolver: |md
+  LayoutResolver func(engine)\
+  always returns\
+  d2dagrelayout.DefaultLayout\
+  (ignores requested engine string —\
+  this renderer wires in exactly\
+  one, pure-Go layout engine)
+|
+
+d2lib-compile: "d2lib.Compile(ctx, dsl,\nCompileOptions{Ruler, LayoutResolver})"
+
+internal: {
+  label: "Inside d2lib.Compile (D2 library internals)"
+  parse: "parse D2 source\n-> AST"
+  graph: "compile AST\n-> d2graph.Graph\n(shapes, connections,\nstyles, containers)"
+  layout: "run layout engine\n(d2dagrelayout)\n-> assigns X/Y positions,\nconnection routes"
+  measure: "use Ruler to size\nlabels or wrap text"
+  target: "convert to\nd2target.Diagram\n(flat render-ready\nscene graph)"
+  parse -> graph -> measure -> layout -> target
+}
+
+compile-fail: "err != nil?" {shape: diamond}
+result: "*d2target.Diagram" {shape: cylinder}
+
+dsl -> with-log
+with-log -> ruler
+ruler -> ruler-fail
+ruler-fail -> "return error, wrapped\n\"init text ruler: %w\"": "yes"
+ruler-fail -> d2lib-compile: "no"
+
+layout-resolver -> d2lib-compile: "passed in\nCompileOptions"
+d2lib-compile -> internal.parse
+internal.target -> compile-fail
+compile-fail -> "return error\n(unwrapped)": "yes"
+compile-fail -> result: "no"

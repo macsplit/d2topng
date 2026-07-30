@@ -1,0 +1,81 @@
+title: |md
+  # Connection (Edge) Drawing — edges.go: drawConnection()
+| {near: top-center}
+
+conn-in: "d2target.Connection" {shape: cylinder}
+
+route-check: "len(route) < 2 ?" {shape: diamond}
+bail: "return\n(nothing to draw)" {shape: oval}
+
+setup-stroke: |md
+  scaledWidth = StrokeWidth * outputScale\
+  setColor(Stroke, Opacity)\
+  dc.SetLineWidth(scaledWidth)
+|
+dash-check: "StrokeDash > 0 ?" {shape: diamond}
+apply-dash: "svg.GetStrokeDashAttributes()\n-> dc.SetDash(dash, gap)"
+apply-solid: "dc.SetDash()\n(solid line)"
+
+move-start: "dc.MoveTo(route[0])"
+curve-check: "conn.IsCurve ?" {shape: diamond}
+cubic-loop: |md
+  for i := 1; i < len-2; i += 3:\
+  dc.CubicTo(route[i], route[i+1], route[i+2])\
+  (route holds control points\
+  in groups of 3 per segment)
+|
+line-loop: "for each remaining point:\ndc.LineTo(point)"
+
+stroke-path: "dc.Stroke()"
+
+dst-arrow: "DstArrow != NoArrowhead ?" {shape: diamond}
+draw-dst-arrow: "drawArrowhead(route[-2] -> route[-1])"
+src-arrow: "SrcArrow != NoArrowhead ?" {shape: diamond}
+draw-src-arrow: "drawArrowhead(route[1] -> route[0])"
+
+arrowhead-detail: |md
+  drawArrowhead(from, tip):\
+  angle = atan2(tip-from)\
+  two points at tip, offset by\
+  ±0.4 rad and arrowheadLength=10,\
+  filled triangle in stroke color.\
+  Every non-"none" D2 arrowhead\
+  shape renders as this one\
+  filled-triangle style.
+|
+
+edge-label: "conn.Label != \"\" ?" {shape: diamond}
+midpoint-calc: |md
+  midpoint(route):\
+  walks the polyline's total\
+  Euclidean length, returns the\
+  point at exactly half that\
+  length (interpolated within\
+  whichever segment it falls in)
+|
+draw-label-text: "fontFace + setColor +\ndrawMultilineAt(midpoint)"
+
+conn-in -> route-check
+route-check -> bail: "yes"
+route-check -> setup-stroke: "no"
+setup-stroke -> dash-check
+dash-check -> apply-dash: "yes"
+dash-check -> apply-solid: "no"
+apply-dash -> move-start
+apply-solid -> move-start
+move-start -> curve-check
+curve-check -> cubic-loop: "yes"
+curve-check -> line-loop: "no"
+cubic-loop -> stroke-path
+line-loop -> stroke-path
+stroke-path -> dst-arrow
+dst-arrow -> draw-dst-arrow: "yes"
+dst-arrow -> src-arrow: "no / after"
+draw-dst-arrow -> arrowhead-detail
+draw-dst-arrow -> src-arrow
+src-arrow -> draw-src-arrow: "yes"
+src-arrow -> edge-label: "no / after"
+draw-src-arrow -> arrowhead-detail
+draw-src-arrow -> edge-label
+edge-label -> midpoint-calc: "yes"
+midpoint-calc -> draw-label-text

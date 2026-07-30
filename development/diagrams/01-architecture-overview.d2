@@ -1,0 +1,88 @@
+title: |md
+  # d2topng — System Architecture Overview
+| {near: top-center}
+
+users: {
+  label: "Callers"
+  shape: rectangle
+  cli-user: "Developer\n(terminal)"
+  http-client: "Agent / script\n(HTTP client)"
+}
+
+entrypoints: {
+  label: "Entrypoints (cmd/)"
+  d2topng-cli: "cmd/d2topng\nmain.go" {
+    shape: rectangle
+  }
+  d2topng-server: "cmd/d2topng-server\nmain.go" {
+    shape: rectangle
+  }
+}
+
+render-pkg: {
+  label: "internal/render (core library)"
+  shape: rectangle
+  style.fill: "#EDF2FB"
+
+  compile: "Compile()\nrender.go"
+  render: "Render()\nrender.go"
+  shapes: "shapes.go\ndrawShape / drawOutline\ndraw3D / drawLabel"
+  edges: "edges.go\ndrawConnection\ndrawArrowhead"
+  color: "color.go\nsetColor"
+  palette: "palette.go\nresolveColor"
+  fonts: "fonts.go\nfontFace"
+  svgpath: "svgpath.go\ndrawSVGPath"
+}
+
+d2-library: {
+  label: "oss.terrastruct.com/d2 (vendored library, not a subprocess)"
+  shape: rectangle
+  style.fill: "#F5F0E6"
+  d2lib: "d2lib.Compile"
+  dagre: "d2dagrelayout\n(pure-Go layout)"
+  textmeasure: "textmeasure.Ruler"
+  d2target: "d2target.Diagram\n(scene graph)"
+  theme: "d2themescatalog\nNeutralDefault"
+  fontfaces: "d2fonts\n(embedded SourceSansPro)"
+}
+
+rasterizer: {
+  label: "Drawing & output"
+  shape: rectangle
+  gg: "fogleman/gg\n(2D rasterizer)"
+  pngenc: "image/png\n(stdlib encoder)"
+}
+
+users.cli-user -> entrypoints.d2topng-cli: "invokes"
+users.http-client -> entrypoints.d2topng-server: "POST /render"
+
+entrypoints.d2topng-cli -> render-pkg.compile: "reads .d2 file,\ncalls"
+entrypoints.d2topng-cli -> render-pkg.render: "calls"
+entrypoints.d2topng-cli -> rasterizer.pngenc: "writes PNG file"
+
+entrypoints.d2topng-server -> render-pkg.compile: "body = D2 source"
+entrypoints.d2topng-server -> render-pkg.render: "calls"
+entrypoints.d2topng-server -> rasterizer.pngenc: "streams PNG response"
+
+render-pkg.compile -> d2-library.d2lib: "delegates parse+compile"
+d2-library.d2lib -> d2-library.dagre: "layout engine\n(LayoutResolver)"
+d2-library.d2lib -> d2-library.textmeasure: "measures label sizes"
+d2-library.d2lib -> d2-library.d2target: "produces"
+render-pkg.compile -> d2-library.d2target: "returns *d2target.Diagram"
+
+render-pkg.render -> render-pkg.shapes: "per-shape,\nin ZIndex order"
+render-pkg.render -> render-pkg.edges: "per-connection,\nin ZIndex order"
+render-pkg.shapes -> render-pkg.color: "fill/stroke"
+render-pkg.edges -> render-pkg.color: "fill/stroke"
+render-pkg.color -> render-pkg.palette: "theme token\n-> hex"
+render-pkg.palette -> d2-library.theme: "reads"
+render-pkg.shapes -> render-pkg.fonts: "label text"
+render-pkg.edges -> render-pkg.fonts: "label text"
+render-pkg.fonts -> d2-library.fontfaces: "embedded TTF bytes"
+render-pkg.shapes -> render-pkg.svgpath: "non-rect shapes\n(lib/shape path data)"
+
+render-pkg.shapes -> rasterizer.gg: "draw calls"
+render-pkg.edges -> rasterizer.gg: "draw calls"
+render-pkg.svgpath -> rasterizer.gg: "draw calls"
+render-pkg.render -> rasterizer.gg: "owns gg.Context"
+rasterizer.gg -> rasterizer.pngenc: "dc.Image()\n(image.Image)"

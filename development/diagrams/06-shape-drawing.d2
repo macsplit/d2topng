@@ -1,0 +1,126 @@
+title: |md
+  # Shape Drawing — shapes.go: drawShape()
+| {near: top-center}
+
+shape-in: "d2target.Shape" {shape: cylinder}
+
+has-shadow: "s.Shadow ?" {shape: diamond}
+draw-shadow: |md
+  drawShadow():\
+  offset copy of outline,\
+  fill #0A0F25 @ opacity 0.25,\
+  no stroke
+|
+
+is-multiple: "s.Multiple ?" {shape: diamond}
+draw-multiple: |md
+  offset by MULTIPLE_OFFSET\
+  (x+off, y-off), draw a full\
+  extra outline behind\
+  ("stacked cards" effect)
+|
+
+is-3d: "s.ThreeDee &&\nisRectLike(type) ?" {shape: diamond}
+draw-3d: |md
+  draw3D(): back copy offset\
+  by THREE_DEE_OFFSET, top\
+  panel quad, right panel quad,\
+  then front face on top —\
+  isometric-look box
+|
+draw-normal: "drawOutline()\nat shape's own box"
+
+is-double: "s.DoubleBorder ?" {shape: diamond}
+draw-inner: |md
+  drawOutline() again, inset by\
+  INNER_BORDER_OFFSET, fill\
+  "none" (concentric ring effect)
+|
+
+draw-label: "drawLabel()"
+
+outline-dispatch: {
+  label: "drawOutline() shape-type dispatch"
+  rect-like: |md
+    isRectLike?\
+    (rectangle, sequence_diagram,\
+    hierarchy, "", or a composite\
+    type: class/sql_table/image)
+  | {shape: diamond}
+  trace-rect: "traceRect():\nrounded or plain rectangle"
+
+  is-oval: "type == oval ?\n(circle normalized\nto square oval)" {shape: diamond}
+  draw-ellipse: "dc.DrawEllipse()\n(native primitive —\nlib/shape has no oval path)"
+
+  lookup: "DSL_SHAPE_TO_SHAPE_TYPE\nlookup ok?" {shape: diamond}
+  fallback-rect: "unknown -> traceRect()\n(safe fallback)"
+  gen-path: |md
+    shape.NewShape(type, box)\
+    .GetSVGPathData()\
+    -> drawSVGPath() per segment\
+    (diamond, parallelogram,\
+    cylinder, cloud, queue,\
+    hexagon, step, package,\
+    stored_data, page, document...)
+  |
+
+  fill-stroke: "fillAndStroke(dc, fill,\nstroke, width, dash, opacity)"
+
+  rect-like -> trace-rect: "yes"
+  rect-like -> is-oval: "no"
+  is-oval -> draw-ellipse: "yes"
+  is-oval -> lookup: "no"
+  lookup -> fallback-rect: "no"
+  lookup -> gen-path: "yes"
+  trace-rect -> fill-stroke
+  draw-ellipse -> fill-stroke
+  fallback-rect -> fill-stroke
+  gen-path -> fill-stroke
+}
+
+fill-stroke-detail: {
+  label: "fillAndStroke() detail"
+  set-fill: "setColor(fill) ->\nhasFill"
+  has-stroke-check: |md
+    hasStroke =\
+    width>0 && stroke!="" &&\
+    stroke != "none"
+  |
+  fill-only: "dc.Fill()" {shape: oval}
+  fill-preserve: "dc.FillPreserve()\n(keep path for stroke pass)"
+  scale-stroke: |md
+    scaledWidth = width * outputScale\
+    (device-pixel space, NOT\
+    scaled by the transform matrix)
+  |
+  set-dash: |md
+    dash > 0 ?\
+    svg.GetStrokeDashAttributes()\
+    : dc.SetDash() (solid)
+  |
+  do-stroke: "dc.Stroke()" {shape: oval}
+  clear-only: "dc.ClearPath()\n(neither fill nor stroke)" {shape: oval}
+
+  set-fill -> has-stroke-check
+  has-stroke-check -> fill-only: "fill only"
+  has-stroke-check -> fill-preserve: "fill + stroke"
+  fill-preserve -> scale-stroke -> set-dash -> do-stroke
+  has-stroke-check -> clear-only: "neither"
+}
+
+shape-in -> has-shadow
+has-shadow -> draw-shadow: "yes"
+has-shadow -> is-multiple: "no / after"
+draw-shadow -> is-multiple
+is-multiple -> draw-multiple: "yes"
+is-multiple -> is-3d: "no / after"
+draw-multiple -> is-3d
+is-3d -> draw-3d: "yes"
+is-3d -> draw-normal: "no"
+draw-3d -> is-double
+draw-normal -> outline-dispatch.rect-like
+outline-dispatch.fill-stroke -> fill-stroke-detail.set-fill
+outline-dispatch -> is-double
+is-double -> draw-inner: "yes"
+is-double -> draw-label: "no / after"
+draw-inner -> draw-label

@@ -1,0 +1,69 @@
+title: |md
+  # HTTP Server Flow — cmd/d2topng-server/main.go
+| {near: top-center}
+
+boot: {
+  label: "Startup"
+  read-env: "read PORT\n(default \"10000\")\nread D2TOPNG_API_TOKEN"
+  warn: "log warning if token\nis empty (open endpoint)"
+  mux: "http.NewServeMux()\nGET /healthz\nPOST /render"
+  listen: "http.Server{}\nListenAndServe()"
+  read-env -> warn -> mux -> listen
+}
+
+healthz: {
+  label: "GET /healthz"
+  h1: "200 OK, body \"ok\"\n(no auth)"
+}
+
+render-req: {
+  label: "POST /render"
+
+  auth: "Authorization: Bearer <token>\nmatches D2TOPNG_API_TOKEN?" {shape: diamond}
+  unauthorized: "401 Unauthorized" {shape: oval}
+
+  scale-param: "parse ?scale=N\n(default 1.0)"
+  scale-valid: "valid float > 0?" {shape: diamond}
+  bad-scale: "400 invalid scale parameter" {shape: oval}
+
+  read-body: |md
+    io.ReadAll(\
+      http.MaxBytesReader(\
+        w, r.Body, 1 MiB))
+  |
+  body-ok: "read ok & non-empty?" {shape: diamond}
+  bad-body: "400 too large /\nunreadable / empty" {shape: oval}
+
+  ctx-timeout: "context.WithTimeout\n(20s)"
+  do-compile: "render.Compile(ctx, body)"
+  compile-ok: "compiled?" {shape: diamond}
+  compile-fail: "400\n\"d2 compile error: (diagnostics)\"" {shape: oval}
+
+  do-render: "render.Render(diagram, scale)"
+  render-ok: "rendered?" {shape: diamond}
+  render-fail: "500 render error" {shape: oval}
+
+  respond: |md
+    Content-Type: image/png\
+    png.Encode(w, img)
+  | {shape: oval}
+
+  auth -> unauthorized: "no"
+  auth -> scale-param: "yes / no token set"
+  scale-param -> scale-valid
+  scale-valid -> bad-scale: "no"
+  scale-valid -> read-body: "yes"
+  read-body -> body-ok
+  body-ok -> bad-body: "no"
+  body-ok -> ctx-timeout: "yes"
+  ctx-timeout -> do-compile
+  do-compile -> compile-ok
+  compile-ok -> compile-fail: "no"
+  compile-ok -> do-render: "yes"
+  do-render -> render-ok
+  render-ok -> render-fail: "no"
+  render-ok -> respond: "yes"
+}
+
+boot.listen -> healthz.h1: "routes"
+boot.listen -> render-req.auth: "routes"

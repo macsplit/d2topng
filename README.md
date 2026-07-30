@@ -37,6 +37,11 @@ bin/d2topng [-scale N] <input.d2> <output.png>
 - `-scale N` — output resolution multiplier (default 1). Use `-scale 2` or
   higher for crisp high-DPI output; text and strokes stay sharp rather than
   being blurred by upscaling.
+- `-version` — print version info and exit. `make build` stamps a real
+  version (from `git describe`); a plain `go build`/`go install` falls back
+  to the git commit Go embeds automatically, so `d2topng -version` always
+  tells you exactly which commit produced the binary you're running — handy
+  for confirming an installed binary isn't stale after pulling new changes.
 
 ## Test
 

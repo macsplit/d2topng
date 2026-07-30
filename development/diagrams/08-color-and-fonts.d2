@@ -1,0 +1,98 @@
+title: |md
+  # Color Resolution & Font Loading
+| {near: top-center}
+
+color-flow: {
+  label: "Color resolution: color.go + palette.go"
+
+  d2-field: |md
+    D2 color field on a\
+    Shape/Connection:\
+    theme token ("B6", "N1", "AA4"...)\
+    OR a literal ("red", "#ff0000")
+  | {shape: cylinder}
+
+  set-color: "setColor(dc, token, opacity)"
+  sentinel-check: "token == \"\" or\ntoken == \"none\" ?" {shape: diamond}
+  skip: "return false\n(caller skips fill/stroke —\nD2's sentinel for\n\"don't draw this\")" {shape: oval}
+
+  resolve: "resolveColor(token)"
+  token-switch: |md
+    switch on token:\
+    N1..N7 -> theme.Neutrals.*\
+    B1..B6 -> theme.B*\
+    AA2,AA4,AA5 -> theme.AA*\
+    AB4,AB5 -> theme.AB*\
+    default -> token unchanged\
+    (literal colors pass through)
+  |
+  theme-source: |md
+    theme = d2themescatalog\
+      .NeutralDefault.Colors\
+    (the ONE hardcoded palette —\
+    no theme selection support)
+  | {shape: cylinder}
+
+  parse-css: "csscolorparser.Parse(resolved)"
+  parse-ok: "parsed OK ?" {shape: diamond}
+  apply-alpha: "c.A *= opacity\ndc.SetColor(c)" {shape: oval}
+  hex-fallback: |md
+    dc.SetHexColor(resolved)\
+    (parse failed — treat as a\
+    literal hex string directly)
+  | {shape: oval}
+
+  d2-field -> set-color
+  set-color -> sentinel-check
+  sentinel-check -> skip: "yes"
+  sentinel-check -> resolve: "no"
+  resolve -> token-switch
+  token-switch -> theme-source: "known token"
+  token-switch -> parse-css
+  theme-source -> parse-css
+  parse-css -> parse-ok
+  parse-ok -> apply-alpha: "yes"
+  parse-ok -> hex-fallback: "no"
+}
+
+font-flow: {
+  label: "Font loading: fonts.go"
+
+  init: |md
+    package init():\
+    d2fonts.FontFaces.Get(\
+      SourceSansPro, REGULAR)\
+    d2fonts.FontFaces.Get(\
+      SourceSansPro, BOLD)\
+    (D2's own embedded font\
+    bytes — no separate font\
+    file shipped, no licensing\
+    decision needed)
+  |
+  parse-ttf: "truetype.Parse()\n-> regularTTF, boldTTF\n(package vars)"
+  panic-check: "parse error ?" {shape: diamond}
+  panic: "panic(err)\n(fatal at startup —\nembedded font is\nassumed always valid)" {shape: oval}
+
+  font-face-call: "fontFace(bold, points)"
+  pick-face: "bold ? boldTTF : regularTTF"
+  scale-size: |md
+    truetype.NewFace(f, {\
+      Size: points * outputScale,\
+      DPI: 72,\
+    })\
+    (font size must be scaled\
+    explicitly here — gg's\
+    transform matrix scales path\
+    geometry automatically but\
+    NOT font rendering)
+  |
+
+  init -> parse-ttf
+  parse-ttf -> panic-check
+  panic-check -> panic: "yes"
+  panic-check -> font-face-call: "no (ready for use)"
+  font-face-call -> pick-face
+  pick-face -> scale-size
+}
+
+color-flow.apply-alpha -> font-flow.font-face-call: "both consumed by\nshapes.go / edges.go\nwhen drawing labels" {style.stroke-dash: 4}

@@ -1,0 +1,57 @@
+title: |md
+  # CLI Flow — cmd/d2topng/main.go
+| {near: top-center}
+
+start: "main()" {shape: oval}
+run: "run()"
+
+parse-flags: "flag.Parse()\n-scale N (default 1)"
+check-args: "NArg() == 2 ?" {shape: diamond}
+usage: "flag.Usage()\nos.Exit(2)"
+
+read-file: "os.ReadFile(inPath)"
+read-err: "return error" {shape: diamond}
+
+compile: "render.Compile(ctx, src)"
+compile-err: "compile error?" {shape: diamond}
+surface-verbatim: |md
+  Return D2's own compile\
+  error unwrapped — it already\
+  includes file:line:col plus\
+  a source snippet.
+|
+
+render-call: "render.Render(diagram, scale)"
+render-err: "render error?" {shape: diamond}
+
+create-out: "os.Create(outPath)"
+png-encode: "png.Encode(out, img)"
+
+exit-ok: "exit 0" {shape: oval}
+exit-err: |md
+  print to stderr:\
+  `d2topng: <error>`\
+  os.Exit(1)
+| {shape: oval}
+
+start -> run
+run -> parse-flags
+parse-flags -> check-args
+check-args -> usage: "no"
+usage -> exit-err
+check-args -> read-file: "yes"
+
+read-file -> read-err
+read-err -> exit-err: "err != nil"
+read-err -> compile: "ok"
+
+compile -> compile-err
+compile-err -> exit-err: "yes\n(verbatim D2 diagnostics)"
+compile-err -> render-call: "no"
+
+render-call -> render-err
+render-err -> exit-err: "yes"
+render-err -> create-out: "no"
+
+create-out -> png-encode
+png-encode -> exit-ok

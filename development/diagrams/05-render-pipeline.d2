@@ -1,0 +1,67 @@
+title: |md
+  # Render Pipeline — render.Render()
+| {near: top-center}
+
+diagram: "*d2target.Diagram" {shape: cylinder}
+
+clamp-scale: "scale <= 0 ?\n-> treat as 1" {shape: diamond}
+set-global: |md
+  outputScale = scale\
+  (package-level var; read by\
+  fonts.go and stroke/dash code\
+  in shapes.go & edges.go, since\
+  gg's transform matrix scales\
+  path geometry automatically\
+  but NOT stroke width, dash\
+  length, or font size)
+|
+
+bbox: "diagram.BoundingBox()\n-> tl, br"
+size: "width = br.X-tl.X + pad*2\nheight = br.Y-tl.Y + pad*2\n(pad = 100, matches\nd2svg DEFAULT_PADDING)"
+
+new-ctx: "gg.NewContext(\n  width*scale, height*scale)"
+clear-bg: "SetHexColor(theme.N7)\ndc.Clear()"
+apply-scale: "dc.Scale(scale, scale)\n(supersampling transform)"
+translate: |md
+  dc.Translate(\
+    pad - tl.X, pad - tl.Y)\
+  shifts bbox top-left to (pad, pad)
+|
+
+collect: |md
+  Build one flat list of\
+  {zIndex, draw func} for\
+  every shape AND every\
+  connection
+|
+sort-z: |md
+  sort.SliceStable by zIndex\
+  (matches d2svg's own\
+  zIndex-ordered layering —\
+  shapes and edges are\
+  interleaved, not drawn\
+  as two separate passes)
+|
+draw-loop: "for each item:\nitem.draw()" {shape: diamond}
+
+drawShape: "shapes.drawShape(dc, shape)"
+drawConnection: "edges.drawConnection(dc, conn)"
+
+to-image: "dc.Image()\n-> image.Image"
+
+diagram -> clamp-scale
+clamp-scale -> set-global
+set-global -> bbox
+bbox -> size
+size -> new-ctx
+new-ctx -> clear-bg
+clear-bg -> apply-scale
+apply-scale -> translate
+translate -> collect
+collect -> sort-z
+sort-z -> draw-loop
+draw-loop -> drawShape: "shape item"
+draw-loop -> drawConnection: "connection item"
+drawShape -> draw-loop: "next"
+drawConnection -> draw-loop: "next"
+draw-loop -> to-image: "done"
