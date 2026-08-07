@@ -93,6 +93,12 @@ configuration beyond setting the `D2TOPNG_API_TOKEN` secret in the Render
 dashboard (it's declared `sync: false` in the blueprint, i.e. not stored in
 git). The service binds to Render's `$PORT` automatically.
 
+### Public deployment
+
+At the time of writing the web-service is live at `https://d2topng.onrender.com/`
+
+The public `D2TOPNG_API_TOKEN` is `bb1ccceef1a5e7b1545e80c012613af0f060146669063718dfcd54d94f027a5e`.
+
 ## License
 
 MIT — see `LICENSE`. D2 itself (`oss.terrastruct.com/d2`) is MPL-2.0, used
