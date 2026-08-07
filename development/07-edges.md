@@ -120,69 +120,93 @@ func drawEdgeLabel(dc *gg.Context, conn d2target.Connection, route []*geo.Point)
     if conn.Label == "" {
         return
     }
-    mx, my := midpoint(route)
+    mx, my, nx, ny := midpointAndNormal(route)
 
+    const gap = 4.0
     labelW, labelH := float64(conn.LabelWidth), float64(conn.LabelHeight)
-    dc.SetHexColor(theme.Neutrals.N7)
-    dc.DrawRectangle(mx-labelW/2-2, my-labelH/2, labelW+4, labelH)
-    dc.Fill()
+    offset := float64(conn.StrokeWidth)/2 + gap
+    lx := mx + nx*(offset+labelW/2)
+    ly := my + ny*(offset+labelH/2)
 
     dc.SetFontFace(fontFace(conn.Bold, float64(conn.FontSize)))
     setColor(dc, conn.GetFontColor(), 1)
-    drawMultilineAt(dc, conn.Label, mx, my)
+    drawMultilineAt(dc, conn.Label, lx, ly)
 }
 ```
 
 Reuses `drawMultilineAt` from [shapes.go](06-shapes.md#drawlabel-and-drawmultilineat)
-— the exact same multi-line-safe text drawing routine, positioned at the
-route's geometric midpoint rather than a label-box top-left like shape
-labels are.
+— the exact same multi-line-safe text drawing routine — but, unlike a shape
+label centered on a label-box top-left, positions it at the route's
+midpoint **offset perpendicular to the line** by half the label's own size
+plus a small gap, so the label sits beside the line rather than on top of
+it.
 
-**The background rect:** without it, the label's greyish text is drawn
-directly on top of the stroked line, so the line visibly runs through the
-glyphs — worst on curved transition arrows where the stroke crosses the
-text diagonally. D2's own SVG renderer avoids this with an SVG `<mask>`
-that cuts a hole in the connection's stroke behind the label
-(`d2svg.makeLabelMask`); since this renderer has no SVG masking, it
-approximates the same effect by painting an opaque rect in the page
-background color (`theme.Neutrals.N7`) before drawing the text, so the
-line appears to gap around the label instead.
+**Why offset instead of drawing on the line:** early on this drew the label
+centered directly on the route midpoint, same as D2's own default
+(`InsideMiddleCenter`). That put the label's greyish text right on top of
+the stroked, bluish line — worst on curved transition arrows, where the
+stroke crosses the text diagonally rather than just skimming underneath a
+couple of glyphs. D2's own SVG renderer tolerates on-line labels because it
+papers over the problem with an SVG `<mask>` that cuts a hole in the
+connection's stroke behind the label (`d2svg.makeLabelMask`); a first fix
+here imitated that with a plain opaque rect in the page background color
+before drawing the text (no real SVG masking available in a raster
+renderer). That worked for the common case but had a real flaw: unlike an
+SVG mask, which only ever removes stroke, an opaque rect **paints over**
+whatever else happens to be underneath — so a label landing on top of
+another shape's differently-colored fill, not just bare canvas, would look
+wrong. Spacing the label off the line entirely avoids that failure mode, at
+the cost of no longer matching D2's exact on-line placement.
 
-**Known limitation:** this only works because the common case is a label
-sitting on bare canvas. If a connection's label happens to land on top of
-*another shape's* differently-colored fill instead — rather than just the
-line and the page background — the opaque rect paints over that fill too,
-which would look wrong. D2's SVG mask doesn't have this problem, since it
-only ever removes stroke, never paints over unrelated content underneath.
-Fixing that properly would mean tracking what's actually beneath the label
-(or drawing labels in a separate masked layer) rather than assuming page
-background — not done here, since a label overlapping another shape is an
-uncommon layout in practice.
+`nx, ny` is the unit vector perpendicular to the route segment the midpoint
+falls on, always oriented "up" (toward decreasing Y — see `segmentNormal`
+below) so a label lands on a consistent side of the line rather than
+flipping above/below depending on which way a given edge happens to be
+routed. `offset` clears the line's own stroke width plus a fixed 4px gap;
+multiplying by `nx`/`ny` separately for the width and height halves (rather
+than a single scalar offset) mirrors the same approximation D2's own
+`label.getOffsetLabelPosition` uses for outside labels — exact for
+axis-aligned segments, an approximation for diagonal ones, which is fine
+since `d2dagrelayout`'s routes are almost always axis-aligned apart from
+short corner curves.
 
-### `midpoint`
+**Known limitation:** because the offset math assumes a roughly
+axis-aligned segment, a label on a steeply diagonal segment (most likely
+the short curved corner of a route, rather than a long midsection) can end
+up offset less cleanly than on a horizontal or vertical one. This wasn't
+visible in local testing but is a known approximation, not a proven-exact
+guarantee, for that case.
+
+### `midpointAndNormal`
 
 ```go
-func midpoint(route []*geo.Point) (x, y float64) {
+func midpointAndNormal(route []*geo.Point) (x, y, nx, ny float64) {
     total := 0.0
     for i := 1; i < len(route); i++ {
         total += geo.EuclideanDistance(route[i-1].X, route[i-1].Y, route[i].X, route[i].Y)
     }
+
     target := total / 2
     walked := 0.0
     for i := 1; i < len(route); i++ {
-        seg := geo.EuclideanDistance(route[i-1].X, route[i-1].Y, route[i].X, route[i].Y)
+        a, b := route[i-1], route[i]
+        seg := geo.EuclideanDistance(a.X, a.Y, b.X, b.Y)
         if walked+seg >= target {
             t := 0.0
             if seg > 0 {
                 t = (target - walked) / seg
             }
-            return route[i-1].X + t*(route[i].X-route[i-1].X),
-                route[i-1].Y + t*(route[i].Y-route[i-1].Y)
+            nx, ny := segmentNormal(a, b)
+            return a.X + t*(b.X-a.X), a.Y + t*(b.Y-a.Y), nx, ny
         }
         walked += seg
     }
     last := route[len(route)-1]
-    return last.X, last.Y
+    nx, ny = 0, -1
+    if len(route) >= 2 {
+        nx, ny = segmentNormal(route[len(route)-2], last)
+    }
+    return last.X, last.Y, nx, ny
 }
 ```
 
@@ -193,16 +217,44 @@ smooth Béziers, so the midpoint of a curved edge's label position is an
 approximation based on its control polygon's length, not the true arc
 length of the curve). Second pass walks the same segments accumulating
 distance until it finds the segment containing the halfway point, then
-linearly interpolates (`t`) within that segment to the exact point.
+linearly interpolates (`t`) within that segment to the exact point, and
+resolves the perpendicular normal (`segmentNormal`, below) for that same
+segment.
 
-The final `return last.X, last.Y` is a defensive fallback for a
+The final `last.X, last.Y` branch is a defensive fallback for a
 single-point or otherwise degenerate route where the walk never finds a
 segment satisfying `walked+seg >= target` — it can't actually be reached
-for `len(route) >= 2` given the two-pass logic, but keeps `midpoint` total
-and panic-free for any input.
+for `len(route) >= 2` given the two-pass logic, but keeps the function
+total and panic-free for any input; the `len(route) >= 2` guard around the
+`segmentNormal` call there specifically covers the single-point case, where
+there is no `route[len(route)-2]` to take a normal against.
 
-Notably, `midpoint` is only ever called from `drawEdgeLabel`, and
-`drawConnection` already returns early for `len(route) < 2`, so in practice
-`midpoint` is never invoked with fewer than 2 points — but see
-[Testing Strategy](09-testing.md) for the unit test that exercises the
-single-point case directly regardless.
+Notably, `midpointAndNormal` (via the `midpoint` wrapper, kept for the unit
+test below) is only ever called from `drawEdgeLabel`, and `drawConnection`
+already returns early for `len(route) < 2`, so in practice it's never
+invoked with fewer than 2 points — but see [Testing Strategy](09-testing.md)
+for the unit test that exercises the single-point case directly regardless.
+
+### `segmentNormal`
+
+```go
+func segmentNormal(a, b *geo.Point) (nx, ny float64) {
+    if a.X == b.X && a.Y == b.Y {
+        return 0, -1
+    }
+    nx, ny = geo.GetUnitNormalVector(a.X, a.Y, b.X, b.Y)
+    if ny > 0 {
+        nx, ny = -nx, -ny
+    }
+    return nx, ny
+}
+```
+
+Wraps D2's own `geo.GetUnitNormalVector` (used the same way by
+`label.getOffsetLabelPosition` for outside shape/border labels) with two
+adjustments: a zero-length-segment guard (`a == b`, which would otherwise
+divide by zero inside `GetUnitNormalVector` and propagate `NaN`/`Inf` all
+the way to the drawn label position), and flipping the vector so `ny` is
+always `<= 0` — i.e. always pointing "up" in image space, since D2's Y axis
+increases downward — so labels consistently land above their line rather
+than alternating sides depending on the segment's direction of travel.

@@ -17,9 +17,10 @@ the small, easily-isolated pure functions:
   `M`/`L`/`H`/`V`/`Z` path subset parses and fills without panicking. See
   [`svgpath.go`](06-shapes.md#svgpathgo--replaying-d2s-path-data).
 - `TestMidpointHalfwayAlongPolyline` / `TestMidpointSinglePoint` — the
-  two-pass length-walk in `midpoint()` lands exactly on a route's corner
-  point when that corner is the true geometric midpoint, and doesn't panic
-  on a single-point route. See [`edges.go`](07-edges.md#midpoint).
+  two-pass length-walk in `midpointAndNormal()` (wrapped by `midpoint()` for
+  this test) lands exactly on a route's corner point when that corner is the
+  true geometric midpoint, and doesn't panic on a single-point route. See
+  [`edges.go`](07-edges.md#midpointandnormal).
 
 [`cmd/d2topng-server/main_test.go`](../cmd/d2topng-server/main_test.go)
 covers every HTTP status path of `handleRender` directly via `httptest`,

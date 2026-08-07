@@ -79,28 +79,36 @@ func drawEdgeLabel(dc *gg.Context, conn d2target.Connection, route []*geo.Point)
 		return
 	}
 
-	mx, my := midpoint(route)
+	mx, my, nx, ny := midpointAndNormal(route)
 
-	// D2's own SVG renderer masks the connection's stroke out behind the
-	// label (d2svg's makeLabelMask) rather than drawing text directly over
-	// the line, so the line visually gaps around the label instead of
-	// running through the glyphs. We approximate that by painting an opaque
-	// page-background rect first. This can look wrong if the label happens
-	// to sit over another shape's differently-colored fill rather than bare
-	// canvas, but that's an uncommon case; matching the common one (label on
-	// top of just the line) is the point.
+	// Offset the label off to the side of the line rather than centering it
+	// directly on top of the stroke. D2's own SVG renderer instead leaves the
+	// label on the line and masks the stroke out from behind it, which only
+	// looks right when there's bare canvas behind the label — if the label
+	// happens to land on another shape's differently-colored fill, a mask
+	// (or an opaque rect standing in for one, without real SVG masking)
+	// paints over that fill incorrectly. Spacing the label away from the
+	// line entirely sidesteps that, at the cost of no longer matching D2's
+	// exact on-line placement.
+	const gap = 4.0
 	labelW, labelH := float64(conn.LabelWidth), float64(conn.LabelHeight)
-	dc.SetHexColor(theme.Neutrals.N7)
-	dc.DrawRectangle(mx-labelW/2-2, my-labelH/2, labelW+4, labelH)
-	dc.Fill()
+	offset := float64(conn.StrokeWidth)/2 + gap
+	lx := mx + nx*(offset+labelW/2)
+	ly := my + ny*(offset+labelH/2)
 
 	dc.SetFontFace(fontFace(conn.Bold, float64(conn.FontSize)))
 	setColor(dc, conn.GetFontColor(), 1)
-	drawMultilineAt(dc, conn.Label, mx, my)
+	drawMultilineAt(dc, conn.Label, lx, ly)
 }
 
-// midpoint returns the point halfway along the route's total path length.
-func midpoint(route []*geo.Point) (x, y float64) {
+// midpointAndNormal returns the point halfway along the route's total path
+// length, plus the unit vector normal to the segment it falls on. The normal
+// always points "up" (toward decreasing Y, since D2's Y axis increases
+// downward) rather than alternating with the segment's direction of travel,
+// so labels land on a consistent side of the line instead of flipping
+// between above and below depending on which way a given edge happens to be
+// routed.
+func midpointAndNormal(route []*geo.Point) (x, y, nx, ny float64) {
 	total := 0.0
 	for i := 1; i < len(route); i++ {
 		total += geo.EuclideanDistance(route[i-1].X, route[i-1].Y, route[i].X, route[i].Y)
@@ -109,17 +117,42 @@ func midpoint(route []*geo.Point) (x, y float64) {
 	target := total / 2
 	walked := 0.0
 	for i := 1; i < len(route); i++ {
-		seg := geo.EuclideanDistance(route[i-1].X, route[i-1].Y, route[i].X, route[i].Y)
+		a, b := route[i-1], route[i]
+		seg := geo.EuclideanDistance(a.X, a.Y, b.X, b.Y)
 		if walked+seg >= target {
 			t := 0.0
 			if seg > 0 {
 				t = (target - walked) / seg
 			}
-			return route[i-1].X + t*(route[i].X-route[i-1].X),
-				route[i-1].Y + t*(route[i].Y-route[i-1].Y)
+			nx, ny := segmentNormal(a, b)
+			return a.X + t*(b.X-a.X), a.Y + t*(b.Y-a.Y), nx, ny
 		}
 		walked += seg
 	}
 	last := route[len(route)-1]
-	return last.X, last.Y
+	nx, ny = 0, -1
+	if len(route) >= 2 {
+		nx, ny = segmentNormal(route[len(route)-2], last)
+	}
+	return last.X, last.Y, nx, ny
+}
+
+// midpoint returns just the point component of midpointAndNormal.
+func midpoint(route []*geo.Point) (x, y float64) {
+	x, y, _, _ = midpointAndNormal(route)
+	return x, y
+}
+
+// segmentNormal returns the unit vector perpendicular to a->b, oriented
+// toward decreasing Y ("up"). Degenerate (zero-length) segments fall back to
+// straight up rather than dividing by zero.
+func segmentNormal(a, b *geo.Point) (nx, ny float64) {
+	if a.X == b.X && a.Y == b.Y {
+		return 0, -1
+	}
+	nx, ny = geo.GetUnitNormalVector(a.X, a.Y, b.X, b.Y)
+	if ny > 0 {
+		nx, ny = -nx, -ny
+	}
+	return nx, ny
 }
