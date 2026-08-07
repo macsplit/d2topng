@@ -80,6 +80,20 @@ func drawEdgeLabel(dc *gg.Context, conn d2target.Connection, route []*geo.Point)
 	}
 
 	mx, my := midpoint(route)
+
+	// D2's own SVG renderer masks the connection's stroke out behind the
+	// label (d2svg's makeLabelMask) rather than drawing text directly over
+	// the line, so the line visually gaps around the label instead of
+	// running through the glyphs. We approximate that by painting an opaque
+	// page-background rect first. This can look wrong if the label happens
+	// to sit over another shape's differently-colored fill rather than bare
+	// canvas, but that's an uncommon case; matching the common one (label on
+	// top of just the line) is the point.
+	labelW, labelH := float64(conn.LabelWidth), float64(conn.LabelHeight)
+	dc.SetHexColor(theme.Neutrals.N7)
+	dc.DrawRectangle(mx-labelW/2-2, my-labelH/2, labelW+4, labelH)
+	dc.Fill()
+
 	dc.SetFontFace(fontFace(conn.Bold, float64(conn.FontSize)))
 	setColor(dc, conn.GetFontColor(), 1)
 	drawMultilineAt(dc, conn.Label, mx, my)

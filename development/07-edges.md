@@ -121,6 +121,12 @@ func drawEdgeLabel(dc *gg.Context, conn d2target.Connection, route []*geo.Point)
         return
     }
     mx, my := midpoint(route)
+
+    labelW, labelH := float64(conn.LabelWidth), float64(conn.LabelHeight)
+    dc.SetHexColor(theme.Neutrals.N7)
+    dc.DrawRectangle(mx-labelW/2-2, my-labelH/2, labelW+4, labelH)
+    dc.Fill()
+
     dc.SetFontFace(fontFace(conn.Bold, float64(conn.FontSize)))
     setColor(dc, conn.GetFontColor(), 1)
     drawMultilineAt(dc, conn.Label, mx, my)
@@ -131,6 +137,27 @@ Reuses `drawMultilineAt` from [shapes.go](06-shapes.md#drawlabel-and-drawmultili
 — the exact same multi-line-safe text drawing routine, positioned at the
 route's geometric midpoint rather than a label-box top-left like shape
 labels are.
+
+**The background rect:** without it, the label's greyish text is drawn
+directly on top of the stroked line, so the line visibly runs through the
+glyphs — worst on curved transition arrows where the stroke crosses the
+text diagonally. D2's own SVG renderer avoids this with an SVG `<mask>`
+that cuts a hole in the connection's stroke behind the label
+(`d2svg.makeLabelMask`); since this renderer has no SVG masking, it
+approximates the same effect by painting an opaque rect in the page
+background color (`theme.Neutrals.N7`) before drawing the text, so the
+line appears to gap around the label instead.
+
+**Known limitation:** this only works because the common case is a label
+sitting on bare canvas. If a connection's label happens to land on top of
+*another shape's* differently-colored fill instead — rather than just the
+line and the page background — the opaque rect paints over that fill too,
+which would look wrong. D2's SVG mask doesn't have this problem, since it
+only ever removes stroke, never paints over unrelated content underneath.
+Fixing that properly would mean tracking what's actually beneath the label
+(or drawing labels in a separate masked layer) rather than assuming page
+background — not done here, since a label overlapping another shape is an
+uncommon layout in practice.
 
 ### `midpoint`
 
